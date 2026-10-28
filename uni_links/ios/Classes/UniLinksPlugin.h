@@ -2,7 +2,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface UniLinksPlugin : NSObject <FlutterPlugin>
+@interface UniLinksPlugin : NSObject <FlutterPlugin, FlutterSceneLifeCycleDelegate>
 + (instancetype)sharedInstance;
 - (BOOL)application:(UIApplication *)application
     continueUserActivity:(NSUserActivity *)userActivity

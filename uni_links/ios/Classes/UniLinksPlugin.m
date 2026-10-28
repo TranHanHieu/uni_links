@@ -35,6 +35,12 @@ static id _instance;
   [chargingChannel setStreamHandler:instance];
 
   [registrar addApplicationDelegate:instance];
+
+  // UIScene (iOS 27 bắt buộc): khi app đang chạy, iOS gửi URL / universal link tới scene delegate,
+  // không còn gọi application delegate. Flutter chỉ chuyển các callback này cho plugin đã đăng ký scene.
+  if ([registrar respondsToSelector:@selector(addSceneDelegate:)]) {
+    [registrar addSceneDelegate:instance];
+  }
 }
 
 - (void)setLatestLink:(NSString *)latestLink {
@@ -65,6 +71,47 @@ static id _instance;
 - (BOOL)application:(UIApplication *)application
     continueUserActivity:(NSUserActivity *)userActivity
       restorationHandler:(void (^)(NSArray *_Nullable))restorationHandler {
+  if ([userActivity.activityType isEqualToString:NSUserActivityTypeBrowsingWeb]) {
+    self.latestLink = [userActivity.webpageURL absoluteString];
+    if (!_eventSink) {
+      self.initialLink = self.latestLink;
+    }
+    return YES;
+  }
+  return NO;
+}
+
+#pragma mark - UIScene life cycle
+
+- (BOOL)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(nullable UISceneConnectionOptions *)connectionOptions {
+  // Cold launch bằng URL: link nằm trong connectionOptions (launchOptions của application delegate là nil).
+  NSURL *url = connectionOptions.URLContexts.anyObject.URL;
+  if (url == nil) {
+    for (NSUserActivity *activity in connectionOptions.userActivities) {
+      if ([activity.activityType isEqualToString:NSUserActivityTypeBrowsingWeb]) {
+        url = activity.webpageURL;
+        break;
+      }
+    }
+  }
+  if (url == nil) return NO;
+  if (self.initialLink == nil) {
+    self.initialLink = [url absoluteString];
+    self.latestLink = self.initialLink;
+  }
+  return YES;
+}
+
+- (BOOL)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
+  NSURL *url = URLContexts.anyObject.URL;
+  if (url == nil) return NO;
+  self.latestLink = [url absoluteString];
+  return YES;
+}
+
+- (BOOL)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity {
   if ([userActivity.activityType isEqualToString:NSUserActivityTypeBrowsingWeb]) {
     self.latestLink = [userActivity.webpageURL absoluteString];
     if (!_eventSink) {
